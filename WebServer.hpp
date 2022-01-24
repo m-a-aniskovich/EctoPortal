@@ -40,7 +40,6 @@ String toStringIp(IPAddress ip) {
 const char *softAP_ssid = APSSID;
 const char *softAP_password = APPSK;
 
-/* hostname for mDNS. Should work at least on windows. Try http://esp8266.local */
 const char *myHostname = "ecto-1";
 
 /* Don't set this wifi credentials. They are configurated at runtime and stored on EEPROM */
@@ -67,6 +66,13 @@ unsigned long lastConnectTry = 0;
 
 /** Current WLAN status */
 unsigned int status = WL_IDLE_STATUS;
+
+String wrap(String text){
+  String Page = F(HEADER_HTML);
+  Page += text;
+  Page += F(FOOTER_HTML);
+  return Page;
+}
 
 void loadCredentials() {
   EEPROM.begin(512);
@@ -168,26 +174,8 @@ boolean captivePortal() {
 /** Handle root or redirect to captive portal */
 void handleRoot() {
   if (captivePortal()) return; // If caprive portal redirect instead of displaying the page.
-  
-  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  server.sendHeader("Pragma", "no-cache");
-  server.sendHeader("Expires", "-1");
-
-  String Page;
-  Page += F("<!DOCTYPE html><html lang='en'><head>"
-            "<meta name='viewport' content='width=device-width'>"
-            "<title>CaptivePortal</title></head><body>"
-            "<h1>HELLO WORLD!!</h1>");
-  if (server.client().localIP() == apIP) {
-    Page += String(F("<p>You are connected through the soft AP: ")) + softAP_ssid + F("</p>");
-  } else {
-    Page += String(F("<p>You are connected through the wifi network: ")) + ssid + F("</p>");
-  }
-  Page += F(
-            "<p>You may want to <a href='/wifi'>config the wifi connection</a>.</p>"
-            "</body></html>");
-
-  server.send(200, "text/html", Page);
+  server.sendHeader("Cache-Control", "max-age=7200");
+  server.send(200, "text/html", wrap(F(INDEX_HTML)));
 }
 
 void handleAPI() {
@@ -223,6 +211,10 @@ void handleAPI() {
     board->releaseButton(channel);
     error = false;
     Page = "Released button " + argument;
+  }else if(command == "beep"){
+    board->beep();
+    error = false;
+    Page = "Beeping..." + argument;
   }else{
     error = true;
     Page = "Command not found";
@@ -239,16 +231,12 @@ void handleAPI() {
 }
 
 void handleStaticCSS() {
-  if (captivePortal()) return; // If caprive portal redirect instead of displaying the error page.
-
   String CSSFile = F(CSS_FILE_STRING);
   server.sendHeader("Cache-Control", "max-age=604800");
   server.send(200, "text/css", CSSFile); // Empty content inhibits Content-length header so we have to close the socket ourselves.
 }
 
 void handleStaticJS() {
-  if (captivePortal()) return; // If caprive portal redirect instead of displaying the error page.
-
   String JSFile = F(JS_FILE_STRING);
   server.sendHeader("Cache-Control", "max-age=604800");
   server.send(200, "application/javascript", JSFile); // Empty content inhibits Content-length header so we have to close the socket ourselves.
@@ -312,7 +300,6 @@ void handleWifi() {
             "<p>You may want to <a href='/'>return to the home page</a>.</p>"
             "</body></html>");
   server.send(200, "text/html", Page);
-  server.client().stop(); // Stop is needed because we sent no content length
 }
 
 /** Handle the WLAN save form and redirect to WLAN config page again */
@@ -328,6 +315,11 @@ void handleWifiSave() {
   server.client().stop(); // Stop is needed because we sent no content length
   saveCredentials();
   connect = strlen(ssid) > 0; // Request WLAN connect with new credentials if there is a SSID
+}
+
+void handleAbout() {
+  server.sendHeader("Cache-Control", "max-age=7200");
+  server.send(200, "text/html", wrap(F(ABOUT_HTML)));
 }
 
 void handleNotFound() {
@@ -354,28 +346,66 @@ void handleNotFound() {
 
 void createRoutes(){
   /* Setup web pages: root, wifi config pages, SO captive portal detectors and not found. */
+  server.onNotFound(handleNotFound);
   server.on("/", handleRoot);
   server.on("/api", handleAPI);
   server.on("/style.css", handleStaticCSS);
-  server.on("/sript.js", handleStaticJS);
+  server.on("/script.js", handleStaticJS);
   server.on("/wifi", handleWifi);
   server.on("/wifisave", handleWifiSave);
+  server.on("/about", handleAbout);
   server.on("/generate_204", handleRoot);  //Android captive portal. Maybe not needed. Might be handled by notFound handler.
   server.on("/fwlink", handleRoot);  //Microsoft captive portal. Maybe not needed. Might be handled by notFound handler.
-  server.onNotFound(handleNotFound);
+  server.on("/update", HTTP_GET, []() {
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/html",  wrap(F(UPDATE_HTML)));
+  });
+  server.on("/update", HTTP_POST, []() {
+    server.sendHeader("Connection", "close");
+    bool hasError = Update.hasError();
+    if(hasError){
+      server.send(400, "text/plain", "FAIL");
+    }else{
+       server.send(200, "text/plain", "Update Successful. Restarting...");
+       delay(500);
+       ESP.restart();
+    }
+  }, []() {
+    HTTPUpload& upload = server.upload();
+    if (upload.status == UPLOAD_FILE_START) {
+      DEBUG_ESP_PORT.setDebugOutput(true);
+      WiFiUDP::stopAll();
+      DEBUG_ESP_PORT.printf("Update: %s\n", upload.filename.c_str());
+      uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+      if (!Update.begin(maxSketchSpace)) { //start with max available size
+        Update.printError(DEBUG_ESP_PORT);
+      }
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+        Update.printError(DEBUG_ESP_PORT);
+      }
+    } else if (upload.status == UPLOAD_FILE_END) {
+      if (Update.end(true)) { //true to set the size to the current progress
+        DEBUG_ESP_PORT.printf("Update Success: %u\nRebooting...\n", upload.totalSize);
+      } else {
+        Update.printError(DEBUG_ESP_PORT);
+      }
+      DEBUG_ESP_PORT.setDebugOutput(false);
+    }
+    yield();
+  });
 }
 
 void setupWifi() {
   DEBUG_ESP_PORT.println();
   DEBUG_ESP_PORT.println("Configuring access point...");
-  /* You can remove the password parameter if you want the AP to be open. */
   WiFi.softAPConfig(apIP, apIP, netMsk);
   WiFi.softAP(softAP_ssid, softAP_password);
-  delay(500); // Without delay I've seen the IP address blank
+  delay(500);
+  
   DEBUG_ESP_PORT.print("AP IP address: ");
   DEBUG_ESP_PORT.println(WiFi.softAPIP());
 
-  /* Setup the DNS server redirecting all the domains to the apIP */
   dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
   dnsServer.start(DNS_PORT, "*", apIP);
 
