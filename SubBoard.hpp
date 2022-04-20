@@ -3,20 +3,21 @@
 #define MUX_A0 12
 #define MUX_A1 14
 #define MUX_A2 16
-#define MUX_D 10
-#define MUX_X 0
+#define MUX_D 0
 
 #define CHA_A 0
 #define CHA_B 1
 #define CHA_C 2
+#define MUX_X 9
 
 #define SPEAKER 13
 
-#define EMULATE_DELAY 1000
+#define PRESS_DELAY 200
 
 class SubBoard{
   private:
-    bool memory[8] = {true,true,true,true,true,true,true,true};
+    bool memory[8] = {false,false,false,false,false,false,false,false};
+    bool stateInUse = false;
     unsigned int curChannel = -1;
     void setMemory(unsigned int channel, bool value){
       channel = channel % 8;
@@ -47,28 +48,15 @@ class SubBoard{
     }
 
     void clearMemory(){
-      for(int i=0; i<8; i++) setMemory(i,false);
+      for(int i=0; i<8; i++){
+        bool curBits[3] = {(i & 1)!=0, (i & 2) != 0, (i & 4) != 0};
+        digitalWrite(MUX_A0, curBits[0] ? HIGH : LOW);
+        digitalWrite(MUX_A1, curBits[1] ? HIGH : LOW);
+        digitalWrite(MUX_A2, curBits[2] ? HIGH : LOW);
+        digitalWrite(MUX_D, false);
+        memory[i] = false;
+      }
       DEBUG_ESP_PORT.println("Cleared U_74HC259D memory");
-    }
-    
-    void setState(unsigned int channel, bool value){
-      channel = channel % 8;
-      bool newBits[3] = {(channel    & 1)!=0, (channel    & 2) != 0, (channel    & 4) != 0};
-
-      digitalWrite(MUX_X, LOW);
-      setMemory(CHA_A, newBits[0]);
-      setMemory(CHA_B, newBits[1]);
-      setMemory(CHA_C, newBits[2]);
-      digitalWrite(MUX_X, value ? HIGH : LOW);
-      
-      DEBUG_ESP_PORT.printf("U_74HC4051D channel %d(%d%d%d) is set to %s\n", channel, newBits[0], newBits[1], newBits[2], value ? "HIGH" : "LOW");
-    }
-
-    void parkState(){
-      digitalWrite(MUX_X, LOW);
-      setMemory(CHA_A,true);
-      setMemory(CHA_B,true);
-      setMemory(CHA_C,true);
     }
   public:
     struct Mods{
@@ -87,15 +75,18 @@ class SubBoard{
     };
     SubBoard(){
       DEBUG_ESP_PORT.println("Called SubBoard constructor");
+      
+      pinMode(MUX_X, OUTPUT);
+      DEBUG_ESP_PORT.println("Set U_74HC4051D output");
+      digitalWrite(MUX_X, LOW);
+      
       pinMode(MUX_A0, OUTPUT);
       pinMode(MUX_A1, OUTPUT);
       pinMode(MUX_A2, OUTPUT);
       pinMode(MUX_D, OUTPUT);
       DEBUG_ESP_PORT.println("Set U_74HC259D outputs");
       clearMemory();
-
-      pinMode(MUX_X, OUTPUT);
-      DEBUG_ESP_PORT.println("Set U_74HC4051D output");
+      parkState();
       
     }
     ~SubBoard() {
@@ -110,24 +101,39 @@ class SubBoard{
       setMemory(channel, false);
     }
 
-    void emulateButton(unsigned int channel){
-      DEBUG_ESP_PORT.printf("Emulating button press U_74HC4051D channel %d\n", channel);
-      channel = channel % 8;
-      setState(channel,true);
-      delay(EMULATE_DELAY); //Thats okay. While this function is delayed ESP serves WiFi clients
-      parkState();
-    }
-
     void pressButton(unsigned int channel){
-      DEBUG_ESP_PORT.printf("Pressing button U_74HC4051D channel %d\n", channel);
       channel = channel % 8;
-      setState(channel,true);
+      bool newBits[3] = {(channel    & 1)!=0, (channel    & 2) != 0, (channel    & 4) != 0};
+
+      while(stateInUse){
+        DEBUG_ESP_PORT.printf("Cannot change state. Already in use");
+        delay(100);
+      }
+
+      stateInUse = true;
+      setMemory(CHA_A, newBits[0]);
+      setMemory(CHA_B, newBits[1]);
+      setMemory(CHA_C, newBits[2]);
+      digitalWrite(MUX_X, HIGH);
+      static unsigned long timeBefore = millis();
+      DEBUG_ESP_PORT.printf("Pressed button U_74HC4051D channel %d(%d)\n", channel, timeBefore);
+
+      delay(PRESS_DELAY);
+      
+      digitalWrite(MUX_X, LOW);
+      parkState();
+      stateInUse = false;
+      static unsigned long timeAfter = millis();
+      DEBUG_ESP_PORT.printf("Released button U_74HC4051D channel %d(%d, elapsed:%d)\n", channel ,timeAfter, timeAfter-timeBefore);
     }
 
-    void releaseButton(unsigned int channel){
-      DEBUG_ESP_PORT.printf("Releasing button U_74HC4051D channel %d\n", channel);
-      channel = channel % 8;
-      parkState();
+    void parkState(){
+      unsigned int channel = 7;
+      bool newBits[3] = {(channel    & 1)!=0, (channel    & 2) != 0, (channel    & 4) != 0};
+      digitalWrite(MUX_X, LOW);
+      setMemory(CHA_A, newBits[0]);
+      setMemory(CHA_B, newBits[1]);
+      setMemory(CHA_C, newBits[2]);
     }
 
     #define NOTE_B0  31
