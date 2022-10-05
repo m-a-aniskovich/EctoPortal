@@ -357,6 +357,8 @@ button {
     border-radius: 0.25rem;
     transition: all .25s ease, color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out, box-shadow .15s ease-in-out;
     height: 40px;
+    margin: 2px
+;
 }
 
 button:focus:not(:focus-visible) {
@@ -390,4 +392,17 @@ button:focus:not(:focus-visible) {
     to {
         transform: rotate(360deg);
     }
+}
+
+.melody{
+    margin-top: 30px;
+}
+.melody label{
+    display: block;
+    padding: 10px 0;
+    width: 100%;
+}
+.melody input {
+    width: 100%;
+    height: 40px;
 }

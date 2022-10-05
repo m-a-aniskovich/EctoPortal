@@ -31,12 +31,6 @@ String toStringIp(IPAddress ip) {
   return res;
 }
 
-/* Set these to your desired softAP credentials. They are not configurable at runtime */
-#ifndef APSSID
-#define APSSID "Ecto-1_ap"
-#define APPSK  "12345678"
-#endif
-
 const char *softAP_ssid = APSSID;
 const char *softAP_password = APPSK;
 
@@ -186,7 +180,17 @@ void handleAPI() {
   String Page;
   bool error;
   
-  if(command == "enableMod"){
+  if(command == "turnOnBlinker"){
+    unsigned int channel = atoi(argument.c_str());
+    board->toggleBlinker(channel, true);
+    error = false;
+    Page = "Enabled blinker " + channel ? "left" : "right";
+  }else if(command == "turnOffBlinker"){
+    unsigned int channel = atoi(argument.c_str());
+    board->toggleBlinker(channel, false);
+    error = false;
+    Page = "Disabled blinker " + channel ? "left" : "right";
+  }else if(command == "enableMod"){
     unsigned int channel = atoi(argument.c_str());
     board->enableMod(channel);
     error = false;
@@ -196,25 +200,29 @@ void handleAPI() {
     board->disableMod(channel);
     error = false;
     Page = "Disabled mod " + argument;
-  }else if(command == "emulateButton"){
-    unsigned int channel = atoi(argument.c_str());
-    board->emulateButton(channel);
-    error = false;
-    Page = "Emulated button " + argument;
   }else if(command == "pressButton"){
     unsigned int channel = atoi(argument.c_str());
     board->pressButton(channel);
     error = false;
     Page = "Pressed button " + argument;
-  }else if(command == "releaseButton"){
-    unsigned int channel = atoi(argument.c_str());
-    board->releaseButton(channel);
-    error = false;
-    Page = "Released button " + argument;
+  }else if(command == "melodyBeep"){
+    DynamicJsonDocument doc(2048);
+    DeserializationError json_error = deserializeJson(doc, argument);
+    doc.shrinkToFit();
+    if (json_error) {
+      Serial.print(F("deserializeJson() failed: "));
+      Serial.println(json_error.f_str());
+      error = true;
+      Page = json_error.f_str();
+    }else{
+      board->melodyBeep(doc["melody"], doc["durations"], doc["pauses"]);
+      error = false;
+      Page = "Playing melody... " + argument;
+    }
   }else if(command == "beep"){
     board->beep();
     error = false;
-    Page = "Beeping..." + argument;
+    Page = "Beeping...";
   }else{
     error = true;
     Page = "Command not found";

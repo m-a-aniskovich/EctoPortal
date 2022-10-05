@@ -2,14 +2,31 @@
     <button type="button" class="btn-off" data-type="mod" data-id="7">Фары</button>
     <button type="button" class="btn-off" data-type="mod" data-id="3">Противотуманки</button>
     <button type="button" class="btn-off" data-type="mod" data-id="4">Стробоскоп</button>
-    <button type="button" class="btn-off" data-type="mod" data-id="5">Правый поворотник</button>
-    <button type="button" class="btn-off" data-type="mod" data-id="6">Левый поворотник</button>
+    <button type="button" class="btn-off" data-type="toggle" data-id="0">Правый поворотник</button>
+    <button type="button" class="btn-off" data-type="toggle" data-id="1">Левый поворотник</button>
 </div>
 <div class="col col-6">
-    <button type="button" class="btn-off" data-type="btn" data-id="2">Кнопка B</button>
-    <button type="button" class="btn-off" data-type="btn" data-id="1">Кнопка C</button>
-    <button type="button" class="btn-off" data-type="btn" data-id="0">Кнопка D</button>
-    <button type="button" class="btn-off" data-type="btn" data-id="3">Кнопка E</button>
-    <button type="button" class="btn-off" data-type="btn" data-id="4">Кнопка F</button>
-    <button type="button" class="btn-off" data-type="speaker">Гудок</button>
+    <button type="button" class="btn-off" data-type="btn" data-id="3">Сирена (B)</button>
+    <button type="button" class="btn-off" data-type="btn" data-id="2">Верхний свет (C)</button>
+    <button type="button" class="btn-off" data-type="btn" data-id="5">Звук двигателя (D)</button>
+    <button type="button" class="btn-off" data-type="btn" data-id="1">Гудок (E)</button>
+    <button type="button" class="btn-off" data-type="btn" data-id="4">Подсветка (F)</button>
+</div>
+<br>
+<br>
+<br>
+<div class="col col-12 melody">
+    <label for="melody-notes">
+        Мелодия:
+        <input id="melody-notes" type="text" value="262,196,196,220,196,0,247,262">
+    </label>
+    <label for="melody-durations">
+        Длительность:
+        <input id="melody-durations" type="text" value="250,125,125,250,250,250,250,250">
+    </label>
+    <label for="melody-pauses">
+        Задержка:
+        <input id="melody-pauses" type="text" value="325,162,162,325,325,325,325,325">
+    </label>
+    <button type="button" class="btn-off" data-type="speaker">Сыграть мелодию</button>
 </div>
